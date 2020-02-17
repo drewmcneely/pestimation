@@ -3,26 +3,24 @@ from numpy.linalg import inv
 
 from . import transformation as tf, probability_representations as pr
 
-class KalmanFilter:
-    def __init__(dynamics, measurement_model):
-        self.dynamics = dynamics
+class KalmanFilterStep:
+    def __init__(dynamics_model, measurement_model):
+        self.dynamics_model = dynamics_model
         self.measurement_model = measurement_model
-    
-    def propagate_prior(x):
+
+    def propagate_prior(self, prior):
         return x.shove_through_transform(self.dynamics)
 
-    def update_estimate_with_measurement(estimate, measurement):
-        prior = estimate.shove_through_transform(self.dynamics)
-        measurement_prediction = prior.shove_through_transform(self.measurement_model)
-        cross_covariance = prior.cross_covariance(self.measurement_model)
+    @property
+    def prior_measurement_mapping(self):
+        return self.dynamics_model.compose_with(self.measurement_model)
+
+    @property
+    def updator(self):
+        mapping = self.prior_measurement_mapping
+        product = GaussianProduct.lift_noisy_transform(mapping)
+        return product.update
         
-        innovation = measurement - measurement_prediction.mean
-        filter_gain = cross_covariance @ inv(measurement_prediction.covariance)
-
-        posterior_mean = prior.mean + filter_gain @ innovation
-        posterior_covariance = prior_covariance - filter_gain @ cross_covariance.T
-
-        return pr.GaussianRepresentation(posterior_mean, posterior_covariance)
 
 class UnscentedKalmanFilter:
     def __init__():

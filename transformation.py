@@ -9,15 +9,66 @@ def vectorized(func):
 
 
 class LinearTransformation:
-    def __init__(self, A):
-        self.domain_dimension = A.shape[1]
-        self.codomain_dimension = A.shape[0]
-        self.A = A
+    def __init__(self, matrix):
+        self.matrix = matrix
+
+    @property
+    def domain_dimension(self):
+        return self.matrix.shape[1]
+
+    @property
+    def codomain_dimension(self):
+        return self.matrix.shape[0]
 
     def push_point(self, x): return self.A @ x
     def push_tangent_vector(self, v): return self.A @ v
     def push_tangent_bivector(self, x, P): return self.A @ P @ self.A.T
 
+    def shove_gaussian(self, g):
+        mean = self.push_point(g.mean)
+        covariance = self.push_tangent_bivector(g.covariance)
+
+        return GaussianRepresentation(mean, covariance)
+
+    @classmethod
+    def compose(cls, T1, T2):
+        return cls(T2.matrix @ T1.matrix)
+
+
+class NoisyLinearTransformation(LinearTransformation):
+    def __init__(self, matrix, noise):
+        self.matrix = matrix
+        self.noise = noise
+
+    @property
+    def underlying_transform(self):
+        return LinearTransform(self.matrix)
+
+    def push_point(self, x):
+        return self.underlying_transform.push_point(x)
+
+    def shove_gaussian(self, g):
+        g1 = self.underlying_transform.shove_gaussian(g)
+        g1.covariance += self.noise
+        return g1
+
+    def compose_with(T1, T2):
+        #Note:
+        #Same as treating T1 as a Gauss(F, Q) and shoving through T2!
+        F = T1.matrix
+        Q = T1.noise
+
+        H = T2.matrix
+        R = T2.noise
+
+        matrix = H @ F
+        noise = H @ Q @ H.T + R
+
+        return cls(matrix, noise)
+
+    @classmethod
+    def from_noisemap(cls, F, Gamma, Q):
+        return cls(F, Gamma @ Q @ Gamma.T)
 
 class AffineTransformation(LinearTransformation):
     def __init__(self, A, b):
@@ -25,22 +76,6 @@ class AffineTransformation(LinearTransformation):
         self.b = b
 
     def push_point(self, x): return super().push_point(x) + self.b
-
-
-class NoisyLinearTransformation(LinearTransformation):
-    def __init__(self, A, noise_mapping_matrix=None, noise_covariance=None):
-        super().__init__(A)
-
-        if noise_mapping_matrix==None:
-            noise_mapping_matrix = np.identity(self.codomain_dimension)
-        if noise_covariance==None:
-            noise_covariance = np.identity(self.codomain_dimension)
-
-        noise_mapping = LinearTransformation(noise_mapping_matrix)
-        self.noise_uncertainty = noise_mapping.push_tangent_bivector(noise_covariance)
-
-    def push_tangent_bivector(self, x, P):
-        return super().push_tangent_bivector(P) + self.noise_uncertainty
 
 
 class NonlinearTransformation:
@@ -51,6 +86,11 @@ class NonlinearTransformation:
         self.mapping = mapping
 
     def push_point(self, x): return self.mapping(x)
+
+
+class NoisyNonlinearTransformation:
+    def __init__(self):
+        pass
 
 
 class NonlinearExtendedTransformation(NonlinearTransformation):
