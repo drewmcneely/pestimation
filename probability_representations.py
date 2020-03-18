@@ -1,6 +1,8 @@
 import numpy as np
 from numpy.linalg import cholesky
 
+import abc
+
 def covariance_from_stds(stds):
     return np.diag(np.square(stds))
 
@@ -45,13 +47,9 @@ class GaussianRepresentation:
         return "Mean:\n" + str(self.mean) + "\n\nCovariance:\n" + str(self.covariance)
 
 class GaussianProduct:
-    def __init__(self, mean1, mean2, cov1, cov2, cross_cov=None):
+    def __init__(self, mean1, mean2, cov1, cov2, cross_cov):
         dim1 = len(mean1)
         dim2 = len(mean2)
-
-        if cross_covariance==None:
-            cross_covariance = np.zeros((dim1, dim2))
-
 
         self.dim1 = dim1
         self.dim2 = dim2
@@ -127,6 +125,10 @@ class GaussianProduct:
     @classmethod
     def from_noisy_transform(cls, g1, f):
         g2 = g1.shove_through_transform(f)
+        print("g1")
+        print(g1)
+        print("g2")
+        print(g2)
         cross_cov = g1.covariance @ f.matrix.T
 
         return cls.from_gaussians(g1, g2, cross_cov)
@@ -134,6 +136,12 @@ class GaussianProduct:
     @classmethod
     def lift_noisy_transform(cls, trans):
         def func(g): return cls.from_noisy_transform(g, trans)
+        return func
+
+    @classmethod
+    def updator_from_transform(cls, trans):
+        func1 = cls.lift_noisy_transform(trans)
+        def func(g, z): return func1(g).update(z)
         return func
 
 

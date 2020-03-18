@@ -1,10 +1,13 @@
 import numpy as np
 from numpy.linalg import inv
 
-from . import transformation as tf, probability_representations as pr
+import transformation as tf, probability_representations as pr
+
+import functools as ft
+from itertools import accumulate, repeat
 
 class KalmanFilterStep:
-    def __init__(dynamics_model, measurement_model):
+    def __init__(self, dynamics_model, measurement_model):
         self.dynamics_model = dynamics_model
         self.measurement_model = measurement_model
 
@@ -18,9 +21,27 @@ class KalmanFilterStep:
     @property
     def updator(self):
         mapping = self.prior_measurement_mapping
-        product = GaussianProduct.lift_noisy_transform(mapping)
-        return product.update
-        
+        return pr.GaussianProduct.updator_from_transform(mapping)
+
+class KalmanFilter:
+    def run_model_list(prior, measurements, kfsteps):
+        updators = [step.updator for step in kfsteps]
+        updators = zip(measurements, updators)
+
+        def f(x, updator):
+            z = updator[0]
+            update = updator[1]
+            return update(x, z)
+
+        return accumulate(updators, func=f, initial=prior)
+
+    def run_single_model(prior, measurements, model):
+        updator = model.updator
+        states = [prior]
+        for meas in measurements:
+            states += [updator(states[-1], meas)]
+        return states
+
 
 class UnscentedKalmanFilter:
     def __init__():

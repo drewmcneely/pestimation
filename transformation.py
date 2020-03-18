@@ -1,6 +1,6 @@
 import numpy as np
-
 from scipy.integrate import solve_ivp
+import abc
 
 def vectorized(func):
     def wrapper(z):
@@ -8,7 +8,15 @@ def vectorized(func):
     return wrapper
 
 
-class LinearTransformation:
+class Transformation(abc.ABC):
+    @abc.abstractmethod
+    def push_point(self, x): pass
+
+    @abc.abstractmethod
+    def push_tangent_bivector(self, x, P): pass
+
+
+class LinearTransformation(Transformation):
     def __init__(self, matrix):
         self.matrix = matrix
 
@@ -20,9 +28,10 @@ class LinearTransformation:
     def codomain_dimension(self):
         return self.matrix.shape[0]
 
-    def push_point(self, x): return self.A @ x
-    def push_tangent_vector(self, v): return self.A @ v
-    def push_tangent_bivector(self, x, P): return self.A @ P @ self.A.T
+    def push_point(self, x): return self.matrix @ x
+    def simulate(self, x): return self.push_point(x)
+    def push_tangent_vector(self, v): return self.matrix @ v
+    def push_tangent_bivector(self, x, P): return self.matrix @ P @ self.matrix.T
 
     def shove_gaussian(self, g):
         mean = self.push_point(g.mean)
@@ -42,10 +51,18 @@ class NoisyLinearTransformation(LinearTransformation):
 
     @property
     def underlying_transform(self):
-        return LinearTransform(self.matrix)
+        return LinearTransformation(self.matrix)
 
     def push_point(self, x):
         return self.underlying_transform.push_point(x)
+
+    def simulate(self, x):
+        dim = self.codomain_dimension
+        noise_mean = np.zeros(dim)
+        noise_cov = self.noise
+        noise_vector = np.random.multivariate_normal(noise_mean, noise_cov)
+
+        return self.push_point(x) + noise_vector
 
     def shove_gaussian(self, g):
         g1 = self.underlying_transform.shove_gaussian(g)
@@ -64,7 +81,7 @@ class NoisyLinearTransformation(LinearTransformation):
         matrix = H @ F
         noise = H @ Q @ H.T + R
 
-        return cls(matrix, noise)
+        return NoisyLinearTransformation(matrix, noise)
 
     @classmethod
     def from_noisemap(cls, F, Gamma, Q):
